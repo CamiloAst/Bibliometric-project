@@ -1,31 +1,18 @@
+import os
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
+from collections import Counter, defaultdict
+from wordcloud import WordCloud
+import networkx as nx
 import seaborn as sns
 import re
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics import pairwise_distances
-from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-from collections import defaultdict
-import nltk
 
-nltk.download('stopwords')
-nltk.download('wordnet')
+# === CONFIGURACIÓN ===
+DATA_FILE = "outputs/unified.csv"
+OUT_DIR = "outputs"
+os.makedirs(OUT_DIR, exist_ok=True)
 
-# === CARGA DE DATOS ===
-df = pd.read_csv("outputs/unified.csv")
-df.columns = df.columns.str.strip().str.lower()
-
-# Asegura que exista la columna correcta
-if "abstract" not in df.columns:
-    raise ValueError("La columna 'abstract' no se encuentra en el archivo CSV.")
-
-# Usa solo los primeros 100 abstracts no nulos
-abstracts = df["abstract"].dropna().head(100).tolist()
-
-# === CATEGORÍAS (puedes ampliarlas si lo deseas) ===
+# === CATEGORÍAS Y VARIABLES ===
 CATEGORIAS = {
     "Habilidades": [
         "Abstraction", "Algorithm", "Algorithmic thinking", "Coding", "Collaboration",
@@ -84,67 +71,72 @@ CATEGORIAS = {
     ]
 }
 
-# === PREPROCESAMIENTO ===
-stop_words = set(stopwords.words('english'))
-lemmatizer = WordNetLemmatizer()
+# === FUNCIONES ===
+def normalizar(text):
+    return re.sub(r"[^\w\s]", "", str(text)).lower()
 
-def preprocess(text):
-    text = text.lower()
-    text = re.sub(r'[^a-z\s]', '', text)
-    tokens = text.split()
-    tokens = [lemmatizer.lemmatize(word) for word in tokens if word not in stop_words]
-    return ' '.join(tokens)
+def contar_frecuencia(df, categorias):
+    resultados = {}
+    abstracts = df['Abstract'].dropna().astype(str).tolist()
+    corpus = " ".join(abstracts)
+    texto = normalizar(corpus)
 
-abstracts_clean = [preprocess(abs_) for abs_ in abstracts]
+    for cat, palabras in categorias.items():
+        conteo = Counter()
+        for palabra in palabras:
+            claves = [normalizar(p) for p in palabra.split(" - ")]
+            total = sum(texto.count(k) for k in claves)
+            conteo[palabra] = total
+        resultados[cat] = conteo
+    return resultados
 
-# === TF-IDF Y MATRIZ DE DISTANCIA EUCLIDIANA ===
-vectorizer = TfidfVectorizer()
-X = vectorizer.fit_transform(abstracts_clean)
-distance_matrix = pairwise_distances(X, metric='euclidean')
+def generar_wordcloud(frecuencias, nombre):
+    wc = WordCloud(width=1200, height=600, background_color="white")
+    wc.generate_from_frequencies(frecuencias)
+    wc.to_file(os.path.join(OUT_DIR, f"nube_{nombre}.png"))
 
-# === CLUSTERING JERÁRQUICO ===
-linkage_ward = linkage(distance_matrix, method='ward')
-linkage_avg = linkage(distance_matrix, method='average')
+def graficar_red_coocurrencia(df):
+    abstracts = df['Abstract'].dropna().astype(str).tolist()
+    palabras_clave = [normalizar(p) for cat in CATEGORIAS.values() for p in cat]
 
-# === FUNCIÓN: DIBUJAR DENDROGRAMA ===
-def plot_dendrogram(linkage_matrix, title):
-    plt.figure(figsize=(12, 6))
-    dendrogram(linkage_matrix, truncate_mode='level', p=10)
-    plt.title(title)
-    plt.xlabel("Documentos")
-    plt.ylabel("Distancia")
+    G = nx.Graph()
+    for texto in abstracts:
+        tokens = set(normalizar(texto).split())
+        presentes = [p for p in palabras_clave if p in tokens]
+        for i in range(len(presentes)):
+            for j in range(i + 1, len(presentes)):
+                G.add_edge(presentes[i], presentes[j])
+
+    plt.figure(figsize=(18, 12))
+    pos = nx.spring_layout(G, k=0.3)
+    nx.draw_networkx(G, pos, node_size=30, font_size=8, with_labels=True)
+    plt.title("Red de Co-ocurrencia de Palabras Clave")
     plt.tight_layout()
-    plt.show()
+    plt.savefig(os.path.join(OUT_DIR, "cooccurrence_network.png"))
+    plt.close()
 
-# === VISUALIZACIONES ===
-plot_dendrogram(linkage_ward, "Dendrograma - Método Ward")
-plot_dendrogram(linkage_avg, "Dendrograma - Método Average")
 
-# === EVALUACIÓN DE COHERENCIA ===
-def evaluar_coherencia(linkage_matrix, k_clusters=5):
-    etiquetas = fcluster(linkage_matrix, k_clusters, criterion='maxclust')
-    df_cluster = pd.DataFrame({"cluster": etiquetas, "abstract": abstracts_clean})
+# === MAIN ===
+def main():
+    df = pd.read_csv(DATA_FILE)
 
-    coherencia = defaultdict(lambda: defaultdict(int))
-    for _, row in df_cluster.iterrows():
-        cluster = row["cluster"]
-        for cat, palabras in CATEGORIAS.items():
-            for palabra in palabras:
-                if palabra.lower() in row["abstract"]:
-                    coherencia[cluster][cat] += 1
+    print("→ Analizando frecuencias por categoría...")
+    resultados = contar_frecuencia(df, CATEGORIAS)
 
-    df_coherencia = pd.DataFrame(coherencia).fillna(0).astype(int)
-    sns.heatmap(df_coherencia, annot=True, cmap="Blues")
-    plt.title("Coherencia por categoría vs cluster")
-    plt.ylabel("Categoría")
-    plt.xlabel("Cluster")
-    plt.tight_layout()
-    plt.show()
+    # Generar nubes por categoría
+    for cat, frecs in resultados.items():
+        generar_wordcloud(frecs, cat.replace(" ", "_"))
 
-    return df_coherencia
+    # Nube general
+    total = Counter()
+    for frec in resultados.values():
+        total.update(frec)
+    generar_wordcloud(total, "global")
 
-print("=== Coherencia con método Ward ===")
-evaluar_coherencia(linkage_ward)
+    # Red de co-ocurrencia
+    print("→ Generando red de co-ocurrencia...")
+    graficar_red_coocurrencia(df)
+    print("✔ Análisis completado. Revisa la carpeta outputs/")
 
-print("=== Coherencia con método Average ===")
-evaluar_coherencia(linkage_avg)
+if __name__ == "__main__":
+    main()

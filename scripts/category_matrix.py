@@ -1,31 +1,18 @@
+import os
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 import re
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics import pairwise_distances
-from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-from collections import defaultdict
-import nltk
+from collections import Counter
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+import networkx as nx
 
-nltk.download('stopwords')
-nltk.download('wordnet')
+# === CONFIGURACIÓN ===
+DATA_FILE = "/mnt/data/unified.csv"
+OUT_DIR = "outputs"
+CATEGORY_MATRIX_FILE = os.path.join(OUT_DIR, "category_matrix.csv")
+os.makedirs(OUT_DIR, exist_ok=True)
 
-# === CARGA DE DATOS ===
-df = pd.read_csv("outputs/unified.csv")
-df.columns = df.columns.str.strip().str.lower()
-
-# Asegura que exista la columna correcta
-if "abstract" not in df.columns:
-    raise ValueError("La columna 'abstract' no se encuentra en el archivo CSV.")
-
-# Usa solo los primeros 100 abstracts no nulos
-abstracts = df["abstract"].dropna().head(100).tolist()
-
-# === CATEGORÍAS (puedes ampliarlas si lo deseas) ===
+# === CATEGORÍAS Y VARIABLES ===
 CATEGORIAS = {
     "Habilidades": [
         "Abstraction", "Algorithm", "Algorithmic thinking", "Coding", "Collaboration",
@@ -84,67 +71,25 @@ CATEGORIAS = {
     ]
 }
 
-# === PREPROCESAMIENTO ===
-stop_words = set(stopwords.words('english'))
-lemmatizer = WordNetLemmatizer()
+def normalizar(text):
+    return re.sub(r"[^\w\s]", "", str(text)).lower()
 
-def preprocess(text):
-    text = text.lower()
-    text = re.sub(r'[^a-z\s]', '', text)
-    tokens = text.split()
-    tokens = [lemmatizer.lemmatize(word) for word in tokens if word not in stop_words]
-    return ' '.join(tokens)
+def crear_matriz_binaria(df, categorias):
+    abstracts = df['Abstract'].fillna("").astype(str).tolist()
+    matrix = []
+    variables = [v for lista in categorias.values() for v in lista]
+    claves = [normalizar(v.split(" - ")[0]) for v in variables]
 
-abstracts_clean = [preprocess(abs_) for abs_ in abstracts]
+    for abstract in abstracts:
+        texto = normalizar(abstract)
+        fila = [1 if k in texto else 0 for k in claves]
+        matrix.append(fila)
 
-# === TF-IDF Y MATRIZ DE DISTANCIA EUCLIDIANA ===
-vectorizer = TfidfVectorizer()
-X = vectorizer.fit_transform(abstracts_clean)
-distance_matrix = pairwise_distances(X, metric='euclidean')
+    df_matrix = pd.DataFrame(matrix, columns=variables)
+    return df_matrix
 
-# === CLUSTERING JERÁRQUICO ===
-linkage_ward = linkage(distance_matrix, method='ward')
-linkage_avg = linkage(distance_matrix, method='average')
+df = pd.read_csv(DATA_FILE)
+matriz = crear_matriz_binaria(df, CATEGORIAS)
+matriz.to_csv(CATEGORY_MATRIX_FILE, index=False)
 
-# === FUNCIÓN: DIBUJAR DENDROGRAMA ===
-def plot_dendrogram(linkage_matrix, title):
-    plt.figure(figsize=(12, 6))
-    dendrogram(linkage_matrix, truncate_mode='level', p=10)
-    plt.title(title)
-    plt.xlabel("Documentos")
-    plt.ylabel("Distancia")
-    plt.tight_layout()
-    plt.show()
-
-# === VISUALIZACIONES ===
-plot_dendrogram(linkage_ward, "Dendrograma - Método Ward")
-plot_dendrogram(linkage_avg, "Dendrograma - Método Average")
-
-# === EVALUACIÓN DE COHERENCIA ===
-def evaluar_coherencia(linkage_matrix, k_clusters=5):
-    etiquetas = fcluster(linkage_matrix, k_clusters, criterion='maxclust')
-    df_cluster = pd.DataFrame({"cluster": etiquetas, "abstract": abstracts_clean})
-
-    coherencia = defaultdict(lambda: defaultdict(int))
-    for _, row in df_cluster.iterrows():
-        cluster = row["cluster"]
-        for cat, palabras in CATEGORIAS.items():
-            for palabra in palabras:
-                if palabra.lower() in row["abstract"]:
-                    coherencia[cluster][cat] += 1
-
-    df_coherencia = pd.DataFrame(coherencia).fillna(0).astype(int)
-    sns.heatmap(df_coherencia, annot=True, cmap="Blues")
-    plt.title("Coherencia por categoría vs cluster")
-    plt.ylabel("Categoría")
-    plt.xlabel("Cluster")
-    plt.tight_layout()
-    plt.show()
-
-    return df_coherencia
-
-print("=== Coherencia con método Ward ===")
-evaluar_coherencia(linkage_ward)
-
-print("=== Coherencia con método Average ===")
-evaluar_coherencia(linkage_avg)
+import ace_tools as tools; tools.display_dataframe_to_user(name="Matriz de Categorías", dataframe=matriz)
