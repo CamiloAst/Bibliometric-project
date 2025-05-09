@@ -24,6 +24,7 @@ if "abstract" not in df.columns:
 
 # Usa solo los primeros 100 abstracts no nulos
 abstracts = df["abstract"].dropna().head(100).tolist()
+titles = df["document title"].dropna().head(100).tolist()
 
 # === CATEGORÍAS (puedes ampliarlas si lo deseas) ===
 CATEGORIAS = {
@@ -108,12 +109,20 @@ linkage_avg = linkage(distance_matrix, method='average')
 
 # === FUNCIÓN: DIBUJAR DENDROGRAMA ===
 def plot_dendrogram(linkage_matrix, title):
-    plt.figure(figsize=(12, 6))
-    dendrogram(linkage_matrix, truncate_mode='level', p=10)
+    plt.figure(figsize=(16, 10))
+    dendrogram(
+        linkage_matrix,
+        labels=titles,
+        leaf_rotation=90,
+        leaf_font_size=8,
+        truncate_mode="none"
+    )
     plt.title(title)
     plt.xlabel("Documentos")
     plt.ylabel("Distancia")
+    plt.subplots_adjust(bottom=0.3)
     plt.tight_layout()
+    plt.savefig(f"outputs/{title}.png", dpi=300, bbox_inches='tight')
     plt.show()
 
 # === VISUALIZACIONES ===
