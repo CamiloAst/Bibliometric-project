@@ -13,7 +13,7 @@ OUT_DIR = "outputs"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # === FUNCIONES ===
-def load_abstracts_from_csv(data_dir=DATA_DIR):
+def load_abstracts_from_csv(data_dir=DATA_DIR, limit=100):
     files = glob.glob(os.path.join(data_dir, "*.csv"))
     abstracts, titles = [], []
     for file in files:
@@ -25,7 +25,11 @@ def load_abstracts_from_csv(data_dir=DATA_DIR):
                 if pd.notna(abstract) and pd.notna(title):
                     abstracts.append(abstract)
                     titles.append(title)
-    return titles, abstracts
+                if len(abstracts) >= limit:
+                    break
+        if len(abstracts) >= limit:
+            break
+    return titles[:limit], abstracts[:limit]
 
 def preprocess_and_vectorize(abstracts):
     vectorizer = TfidfVectorizer(stop_words="english")
@@ -40,14 +44,14 @@ def hierarchical_clustering(X, method="ward"):
 def plot_dendrogram(Z, labels, method):
     plt.figure(figsize=(32, 18))
     plt.title(f"Dendrograma - Método: {method}")
-    dendrogram(Z, labels=labels, leaf_rotation=90)
+    dendrogram(Z, labels=labels, leaf_rotation=90, leaf_font_size=10)
     plt.tight_layout()
-    plt.savefig(os.path.join(OUT_DIR, f"dendrogram_{method}.png"))
+    plt.savefig(os.path.join(OUT_DIR, f"dendrogram_{method}_100.png"))
     plt.close()
 
 # === MAIN ===
 def main():
-    titles, abstracts = load_abstracts_from_csv()
+    titles, abstracts = load_abstracts_from_csv(limit=100)
 
     if not titles:
         print("⚠ No se encontraron abstracts válidos.")
@@ -62,7 +66,7 @@ def main():
         Z = hierarchical_clustering(X, method=method)
         plot_dendrogram(Z, titles, method)
 
-    print("✔ Dendrogramas guardados en outputs/")
+    print("✔ Dendrogramas de los primeros 100 artículos guardados en outputs/")
 
 if __name__ == "__main__":
     main()

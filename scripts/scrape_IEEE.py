@@ -146,11 +146,7 @@ def scrape_ieee(driver):
     wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[5]/div/div/div[3]/div/xpl-root/main/div/xpl-search-results/div/div[1]/div[1]/ul/li[2]/xpl-rows-per-page-drop-down/div/div/button[1]"))).click()
 
     i = 1
-    # 2) Esperar a que el script con global.document.metadata esté en el DOM
-    # driver.find_element(By.ID, "dropdownPerPageLabel").click()
-    # driver.find_element(By.XPATH,
-    #                     "/html/body/div[5]/div/div/div[3]/div/xpl-root/main/div/xpl-search-results/div/div[1]/div[1]/ul/li[2]/xpl-rows-per-page-drop-down/div/div/button[5]").click()
-    # time.sleep(5)
+
     while True:
         driver.execute_script("window.scrollBy(0, 500);")
         time.sleep(1)

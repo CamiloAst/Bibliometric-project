@@ -31,7 +31,7 @@ ARTICLES_DIR = os.path.join(BASE_DIR, "articles")
 def init_driver():
     options = webdriver.ChromeOptions()
     # mientras depuras, comenta la siguiente línea para VER el navegador
-    options.add_argument("--headless=new")
+    # options.add_argument("--headless=new")
     options.add_argument("--window-size=1920,1080")
     service = Service(ChromeDriverManager().install())
     return webdriver.Chrome(service=service, options=options)
@@ -96,6 +96,7 @@ def login_uni(driver):
     google_btn = wait.until(EC.element_to_be_clickable((By.ID, "btn-google")))
     google_btn.click()
 
+    time.sleep(3)
     # 5) Credenciales de Google
     wait.until(EC.element_to_be_clickable((By.ID, "identifierId"))).send_keys(GOOGLE_USER)
     driver.find_element(By.ID, "identifierNext").click()
@@ -104,8 +105,8 @@ def login_uni(driver):
 
     # 6) Esperar campo de búsqueda de IEEE
     wait.until(EC.presence_of_element_located((
-        By.XPATH,
-        "/html/body/div[5]/div/div/div[3]/div/xpl-root/header/xpl-header/div/div[2]/div[2]/xpl-search-bar-migr/div/form/div[2]/div/div[1]/xpl-typeahead-migr/div/input"
+        By.ID,
+        "qs"
     )))
     print("✔ Login en Science Direct completado")
 
@@ -130,7 +131,7 @@ def scrape_sd(driver):
         time.sleep(1)
         driver.find_element(By.CLASS_NAME,"download-all-link-text").click()
         time.sleep(2)
-        driver.find_element(By.XPATH, "/html/body/ngb-modal-window/div/div/div[2]/div/div[3]/button[2]").click()
+        driver.find_element(By.XPATH, "/html/body/div[4]/div/div/div/button/svg").click()
         time.sleep(5)
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(1)
